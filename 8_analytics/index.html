@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=7, IE=9, IE=10">
+		<!--The viewport meta tag is used to improve the presentation and behavior of the samples 
+			on iOS devices-->
+		<meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no">
+		<title>Geometry Service: Relation</title>
+
+		<link rel="stylesheet" href="http://js.arcgis.com/3.6/js/dojo/dijit/themes/claro/claro.css">
+		<link rel="stylesheet" href="http://js.arcgis.com/3.6/js/esri/css/esri.css">
+
+		<style>
+			html, body, #mapDiv {
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				width: 100%;
+			}
+			#info {
+				bottom: 20px;
+				color: #444;
+				height: auto;
+				font-family: arial;
+				left: 20px;
+				margin: 5px;
+				padding: 10px;
+				position: absolute;
+				text-align: left;
+				width: 200px;
+				z-index: 40;
+			}
+			#idealista-info {
+				position: absolute;
+				top: 10px;
+				left: 100px;
+				right: 100px;
+				text-align: center;
+				padding: 10px;
+				z-index: 40;
+				color: #444;
+				font-family: arial;
+			}
+			#results
+			{
+				position: absolute;
+				padding: 5px;
+				top: 90px;
+				width: 200px;
+				right: 10px;
+				min-height: 40px;
+
+				border: 2px solid #666;
+				background-color: #fff;
+				border-radius: 5px;
+				font-family: arial;
+				font-size: small;
+			}
+			#results ul
+			{
+				list-style: none;
+				padding: 0px;
+				margin: 0px;
+			}
+			#results li
+			{
+				text-align: left;
+				clear:both;
+			}
+			#results img
+			{
+				float: left; 
+				margin-right: 10px;
+				margin-bottom: 5px;
+			}
+			.label {
+				display: inline-block;
+				width: 4em;
+			}
+		</style>
+
+		<script src="http://js.arcgis.com/3.6/"></script>
+		<script>
+		"use strict";
+
+			var map;
+			require(["dojo/dom",
+				"dojo/_base/array",
+				"dojo/_base/Color",
+				"dojo/promise/all",
+				"dojo/Deferred",
+				"dojo/number",
+				"dojo/_base/lang",
+
+				"esri/domUtils",
+				"esri/map",
+				"esri/graphic",
+				"esri/geometry/Geometry",
+				"esri/geometry/Point",
+				"esri/geometry/webMercatorUtils",
+				"esri/tasks/GeometryService",
+				"esri/tasks/FeatureSet",
+				"esri/tasks/RelationParameters",
+				"esri/symbols/SimpleLineSymbol",
+				"esri/symbols/SimpleMarkerSymbol",
+				"esri/symbols/SimpleFillSymbol",
+				"esri/request",
+				"esri/tasks/BufferParameters",
+				"esri/IdentityManager",
+				"esri/tasks/ServiceAreaTask",
+				"esri/tasks/ServiceAreaParameters",
+
+				"dijit/layout/BorderContainer",
+				"dijit/layout/ContentPane",
+				"dojo/domReady!"
+	], function(dom, array, Color, all, Deferred, number, lang,
+	domUtils, Map, Graphic, Geometry, Point, webMercatorUtils, GeometryService, FeatureSet, RelationParameters, SimpleLineSymbol, SimpleMarkerSymbol, SimpleFillSymbol, esriRequest, BufferParameters, IdentityManager, ServiceAreaTask, ServiceAreaParameters) 
+	{
+		var serviceAreaTask, geometryService, geometries, baseGraphics, areaGraphics;
+
+		// configurar el proxy
+		esriConfig.defaults.io.proxyUrl = "/workshop/samples/proxy.php";
+		esriConfig.defaults.io.alwaysUseProxy = false;
+
+		map = new esri.Map("mapDiv", {
+			basemap: "streets",
+			center: [-3.676, 40.43],
+			zoom: 13
+		});
+
+		map.on("click", mapClicked);
+
+		geometryService = new GeometryService("http://tasks.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer");
+		serviceAreaTask = new ServiceAreaTask("http://route.arcgis.com/arcgis/rest/services/World/ServiceAreas/NAServer/ServiceArea_World/solveServiceArea");
+
+		function mapClicked(evt) 
+		{
+			geometries = [];
+			map.graphics.clear();
+
+			// marcar el lugar donde el usuario ha hecho click
+			var pointSymbol = new SimpleMarkerSymbol(
+				SimpleMarkerSymbol.STYLE_CROSS, 22,
+				new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, new Color([0, 128, 0]), 4));
+
+			var clickPointGraphic = new Graphic(evt.mapPoint, pointSymbol);
+			map.graphics.add(clickPointGraphic);
+
+			var useDriveTimes = dojo.byId('area-type-isocronas').checked;
+
+			// el callback 'releateGeometries' se disparará cuando terminen las dos peticiones
+			var dl = new all([
+				executeIdealistaSearch(clickPointGraphic),
+				useDriveTimes? 
+					getDriveTimePolygon(clickPointGraphic) : 
+					getBufferPolygon(clickPointGraphic)
+			]).then(relateGeometries);
+		}
+
+
+		function executeIdealistaSearch(graphic) 
+		{
+			var deferred = new Deferred();
+
+			var params = {
+				action: 'json',
+				operation:'V',
+				// k: 'xxx <API key must be secret, added by proxy> xxx',
+				distance: 8000,
+				chalet: true,
+				minRooms: 4,
+				minSize: 500,
+				pics: 1,
+				center: graphic.geometry.getLatitude() + "," + graphic.geometry.getLongitude(),
+			};
+
+			params.numPage = 1;
+
+			var firstRequest = esriRequest({
+				url: "http://www.idealista.com/labs/propertyMap.htm",
+				content: params,
+				error: esriConfig.defaults.io.errorHandler
+			});
+
+			firstRequest.then(function(firstResult)
+			{
+				dojo.byId('idealista-msg').innerHTML = firstResult[0];
+				baseGraphics = [];
+				buildIdealistaLocations(firstResult);
+	
+				var i, totalPages = Math.min(100, firstResult[1].totalPages);
+
+				var promises = []; 
+
+				for(i=2; i<totalPages; i++)
+				{
+					params.numPage = i;
+					promises.push( esriRequest({
+						url: "http://www.idealista.com/labs/propertyMap.htm",
+						content: params,
+						load: buildIdealistaLocations,
+						error: esriConfig.defaults.io.errorHandler
+					}));
+				}
+
+				var dl = new all(promises).then(function(results)
+				{
+					console.log("all requests finished")
+
+					dojo.byId('idealista-count').innerHTML = baseGraphics.length + " resultados";
+
+					deferred.resolve("ok");
+				});
+			});
+
+			return deferred;  // se resolverá cuando terminen todos los callbacks
+		}
+
+
+		function buildIdealistaLocations(response) 
+		{
+			var idealistaPointSymbol = new SimpleMarkerSymbol(
+				SimpleMarkerSymbol.STYLE_SQUARE, 6,
+				new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID, new Color([0, 0, 0]), 1),
+				new Color([255, 0, 0]));
+
+			var results = response[1].elementList;
+			for (var i = 0, il = results.length; i < il; i++) {
+				var point = webMercatorUtils.geographicToWebMercator(new Point(results[i].longitude, results[i].latitude, map.spatialReference));
+				var symbol = lang.clone(idealistaPointSymbol);
+				symbol.setSize( results[i].price / 1000000 * 3 );
+				var graphic = new Graphic(point, symbol, results[i]);
+				map.graphics.add(graphic);
+				baseGraphics.push(graphic);
+			}
+			dojo.byId('idealista-count').innerHTML = baseGraphics.length + " resultados";
+		}
+
+		// calcular area usando un Buffer de 1 km
+
+		function getBufferPolygon(graphic) 
+		{
+			areaGraphics = [];
+
+			var params = new BufferParameters();
+			params.distances = [2]; //[ 1,2,4 ];
+			params.unit = GeometryService.UNIT_KILOMETER;
+			params.bufferSpatialReference = map.spatialReference;
+			params.outSpatialReference = map.spatialReference;
+			params.geometries = [graphic.geometry];
+			return geometryService.buffer(params, parseBufferResponse);
+		}
+
+
+		function parseBufferResponse(results, messages) 
+		{			
+			// var geometry = results[0];
+			results.forEach(function(geometry,index)
+			{
+				var feature = new Graphic(geometry, null, {i:index});
+
+				var polySymbolRed = new SimpleFillSymbol(
+					SimpleLineSymbol.STYLE_SOLID,
+					new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID,
+					new Color([0, 0, 0, 1]), 1),
+					new Color([255, 0, 0, 0.2]));
+				feature.setSymbol(polySymbolRed);
+				map.graphics.add(feature);
+				areaGraphics.push(feature);
+			})
+		}
+
+		// calcular area usando isocronas
+
+		function getDriveTimePolygon(graphic)
+		{
+			areaGraphics = [];
+
+			var featureSet = new FeatureSet();
+			featureSet.features = [graphic];
+
+			var params = new ServiceAreaParameters();
+			params.defaultBreaks = [10]; // [2,4,6];
+			params.outSpatialReference = map.spatialReference;
+			params.outputGeometryPrecision = 0.0;
+			params.outputGeometryPrecisionUnits="esriDecimalDegrees";
+			params.outputPolygons="esriNAOutputPolygonSimplified";
+			params.outputLines="esriNAOutputLineNone";
+			params.doNotLocateOnRestrictedElements = true;
+			params.overlapPolygons = true;
+		
+			params.facilities = featureSet;
+			params.timeOfDay = new Date();
+
+			console.log(params);
+
+			return serviceAreaTask.solve(params,
+				parseDriveTimeResponse,
+				function(err)
+				{
+					console.log(err);
+				}
+			);
+		}
+
+		function parseDriveTimeResponse(results)
+		{
+			// var feature = results.serviceAreaPolygons[0];
+			results.serviceAreaPolygons.forEach(function(feature)
+			{
+				var polySymbolRed = new SimpleFillSymbol(
+					SimpleLineSymbol.STYLE_SOLID,
+					new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID,
+					new Color([0, 0, 0, 1]), 1),
+					new Color([255, 0, 0, 0.2]));
+				feature.setSymbol(polySymbolRed);
+				map.graphics.add(feature);
+				areaGraphics.push(feature);
+			});
+		}
+
+		// combinar resultados
+
+		function relateGeometries(results) 
+		{
+			console.log(results[0]);
+
+			if (!results[0] || !results[1]) {
+				alert("Unable to compute point in polygon.");
+			}
+			var relationParams = new RelationParameters();
+			relationParams.geometries1 = esri.getGeometries(baseGraphics);
+			relationParams.geometries2 = esri.getGeometries(areaGraphics);
+			relationParams.relation = RelationParameters.SPATIAL_REL_WITHIN;
+
+			geometryService.relation(relationParams, addRelateResultsToMap);
+			// alternatively, could use polygon.contains instead of using the geometry service
+		}
+
+
+		function addRelateResultsToMap(relations) 
+		{
+			console.log("add relate results", relations);
+
+			var symbol = new SimpleMarkerSymbol(
+				SimpleMarkerSymbol.STYLE_SQUARE, 8,
+				new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID,
+				new Color([0, 0, 0]), 1),
+				new Color([0, 255, 0]));
+
+			var resultList = [];
+			var resultPoints = [];
+			array.forEach(relations, function(relation) 
+			{
+				resultPoints.push( baseGraphics[relation.geometry1Index]);
+				var pointAttrs = baseGraphics[relation.geometry1Index].attributes;
+				// var areaAttrs = areaGraphics[relation.geometry2Index].attributes;
+				var s = lang.clone(symbol);
+				s.setSize( pointAttrs.price / 1000000 * 3 );
+
+				baseGraphics[relation.geometry1Index].setSymbol(s).getDojoShape().moveToFront();
+
+
+				// añadir a una lista
+				var result = 
+					"<a href='http://" + pointAttrs.url + "''>" + 
+					"<img src='" + pointAttrs.thumbnail + "'>" +
+					"<div class='data-fields'>" + 
+					pointAttrs.address + "<br>" + 
+					pointAttrs.rooms + " habitaciones<br>" + 
+					number.format(pointAttrs.price, {places:0}) + " euros" + 
+					"</a>" + 
+					"</div>";
+				resultList.push( "<li>" + result + "</li>" );
+			});
+			dojo.byId('results').innerHTML = "<ul>" + resultList.join("\n") + "</ul>";
+			//getBufferAroundResults(resultPoints);
+		}
+
+
+		function getBufferAroundResults(graphics)
+		{
+			var params = new BufferParameters();
+			params.distances = [300,500,700]; //[ 1,2,4 ];
+			params.unit = GeometryService.UNIT_METER;
+			params.bufferSpatialReference = map.spatialReference;
+			params.outSpatialReference = map.spatialReference;
+			params.geometries = esri.getGeometries(graphics);
+			params.unionResults = true;
+			return geometryService.buffer(params, parseBufferAroundResultsResponse);
+		}
+
+
+		function parseBufferAroundResultsResponse(results, messages) 
+		{			
+			results.forEach(function(geometry,index)
+			{
+				var feature = new Graphic(geometry, null, {i:index});
+
+				var polySymbolGreen = new SimpleFillSymbol(
+					SimpleLineSymbol.STYLE_SOLID,
+					new SimpleLineSymbol(SimpleLineSymbol.STYLE_SOLID,
+					new Color([0, 0, 0, 1]), 1),
+					new Color([100, 255, 100, 0.0 + ( 3-index) * 0.1 ]));
+				feature.setSymbol(polySymbolGreen);
+				map.graphics.add(feature);
+			})
+		}
+
+	});
+		</script>
+
+	</head>
+
+	<body class="claro">
+		<div id="mapDiv"></div>
+		<div id="info" class="esriSimpleSlider">
+			Haz click en el mapa para buscar en la base de datos de Idealista chalets en venta de más de 500m2 y con 4 o más habitaciones.
+			<br><br><b>Tipo de Área</b><br>
+			<input type="radio" name="area-type" value="isocronas" id="area-type-isocronas"     > <label for="area-type-isocronas">Isocronas (créditos)</label><br>
+			<input type="radio" name="area-type" value="buffer"    id="area-type-buffer" checked> <label for="area-type-buffer">Buffer</label>
+		</div>
+		<div id="idealista-info" class="esriSimpleSlider"><span id="idealista-msg"></span> [<span id="idealista-count">haz click sobre el mapa</span>]</div>
+		<div id="results">nada de momento</div>
+	</body>
+</html>

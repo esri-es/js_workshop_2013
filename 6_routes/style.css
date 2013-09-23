@@ -1,0 +1,29 @@
+html, body, #mapDiv {
+	padding:0;
+	margin:0;
+	height:100%;
+	font-family: arial;
+}
+button {
+	display: block;
+}
+
+.tooltip {
+	transition: opacity 0.25s ease-in-out;
+	text-align: right;
+}
+
+#info {
+	position: absolute;
+	top: 20px;
+	width: 200px;
+	height: auto;
+	right: 20px;
+	margin: 5px;
+	padding: 10px;
+	z-index: 40;
+	border: solid 2px #666;
+	border-radius: 8px;
+	background-color: #fff;
+	color: #444;
+}
