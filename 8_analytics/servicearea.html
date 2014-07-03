@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title>Area de Servicio</title>
+	
+	<link rel="stylesheet" href="http://js.arcgis.com/3.6/js/dojo/dijit/themes/claro/claro.css">
+	<link rel="stylesheet" href="http://js.arcgis.com/3.6/js/esri/css/esri.css">
+	<style> 
+		body,html,#map{margin:0;padding:0;height:100%;width:100%;}
+	</style> 
+	
+	<script src="http://js.arcgis.com/3.6/"></script>  
+	<script type="text/javascript">
+
+	var map;
+	var pointSymbol, polygonSymbol;
+
+	require([
+		"dojo/dom",
+
+		"esri/domUtils",
+		"esri/map",
+		"esri/graphic",
+		"esri/IdentityManager",
+		"esri/tasks/ServiceAreaTask",
+		"esri/tasks/ServiceAreaParameters",
+
+		"esri/symbols/SimpleLineSymbol",
+		"esri/symbols/SimpleMarkerSymbol",
+		"esri/symbols/SimpleFillSymbol",
+
+		"dojo/domReady!"
+
+		], function(
+			dom,
+			domUtils, Map, Graphic, IdentityManager, ServiceAreaTask, ServiceAreaParameters,
+			SimpleLineSymbol, SimpleMarkerSymbol, SimpleFillSymbol
+			)
+	{
+		// configurar el proxy
+		esriConfig.defaults.io.proxyUrl = "/workshop/samples/proxy.php";
+		esriConfig.defaults.io.alwaysUseProxy = false;
+
+		map = new esri.Map("map", {
+			basemap: "streets",
+			center: [-3.707, 40.423],
+			zoom: 14
+		})
+			
+		map.on("click", mapClickHandler);
+
+		var facility;
+		var serviceAreaTask,params;
+
+		params = new ServiceAreaParameters();
+		params.defaultBreaks= [2,4,6];
+		params.outSpatialReference = map.spatialReference;
+		params.outputGeometryPrecision = 0.0;
+		params.outputGeometryPrecisionUnits="esriDecimalDegrees";
+		params.outputPolygons="esriNAOutputPolygonSimplified";
+		params.outputLines="esriNAOutputLineNone";
+		params.doNotLocateOnRestrictedElements = true;
+		params.overlapPolygons = true;
+	
+		serviceAreaTask = new ServiceAreaTask("http://route.arcgis.com/arcgis/rest/services/World/ServiceAreas/NAServer/ServiceArea_World/solveServiceArea");
+
+		pointSymbol = new esri.symbol.SimpleMarkerSymbol(
+			esri.symbol.SimpleMarkerSymbol.STYLE_DIAMOND, 
+			10,
+			new esri.symbol.SimpleLineSymbol(esri.symbol.SimpleLineSymbol.STYLE_SOLID, new dojo.Color([88,116,152]), 1),
+			new dojo.Color([88,116,152,0.45])
+		);
+
+		polygonSymbol = new esri.symbol.SimpleFillSymbol(
+			esri.symbol.SimpleFillSymbol.STYLE_SOLID,  
+			new esri.symbol.SimpleLineSymbol(esri.symbol.SimpleLineSymbol.STYLE_SOLID, new dojo.Color([0,0,255, 0.2]), 3),
+			new dojo.Color([0,0,255, 0.2])
+		);
+
+		function solve(facility)
+		{
+			if( !facility )
+				return;
+
+			var facilities = new esri.tasks.FeatureSet();
+			facilities.features = [facility];
+			params.facilities = facilities;
+			params.timeOfDay = new Date();
+
+			serviceAreaTask.solve(params,
+				function(solveResult)
+				{
+					map.graphics.clear(); //clear existing graphics    
+					map.graphics.add(facility);						
+					solveResult.serviceAreaPolygons.forEach(function(pg)
+					{
+						// var pg = solveResult.serviceAreaPolygons[0];
+						var epg = new esri.Graphic(pg.geometry, polygonSymbol);
+						map.graphics.add(epg);
+					})
+				},
+				function(err)
+				{
+					console.log(err.message);
+				}
+			);
+		}
+
+		function mapClickHandler(evt)
+		{
+			var inPoint = new esri.geometry.Point(evt.mapPoint.x,evt.mapPoint.y,map.spatialReference);
+			facility = new esri.Graphic(inPoint, pointSymbol);
+
+			map.graphics.clear(); //clear existing graphics    
+			map.graphics.add(facility);
+
+			solve(facility);
+		}
+
+	});
+
+	</script>
+</head>
+
+<body class="claro"> 
+		<div id="map"></div>    
+</body>
+</html> 

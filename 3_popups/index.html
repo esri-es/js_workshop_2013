@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+  <!-- http://jsfiddle.net/wrrVd/ -->
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=7, IE=9, IE=10"
+>
+    <!--The viewport meta tag is used to improve the presentation and behavior
+    of the samples on iOS devices-->
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no"/>
+    <title>Info Window Lite</title>
+
+
+    <link rel="stylesheet" href="http://js.arcgis.com/3.6/js/esri/css/esri.css">
+    <style>
+      html, body, #mapDiv { height: 100%; margin: 0; padding: 0; } 
+
+      /*
+      .simpleInfoWindow
+      {
+        padding: 0;
+        border-radius: 0px;
+        -webkit-border-radius: 0px;
+        border-color: #888;
+      }
+      .simpleInfoWindow .title
+      {
+        margin: 0;
+        padding: 5px;
+        border: none;
+        background: #333;
+        color: #fff;
+      }
+
+      .simpleInfoWindow .content
+      {
+        overflow: hidden;
+      }
+
+      .simpleInfoWindow .close
+      {
+        display: none;
+      }
+
+      .simpleInfoWindow div.imgholder
+      {
+        width: 150px;        
+        height: 112px;
+        text-align: center;
+        padding-top: 10px;
+      }
+
+      .simpleInfoWindow img.thumbnail
+      {
+        margin: auto;
+        background: #f0f0f0 url(loading.gif) no-repeat center center; 
+      }
+
+      .simpleInfoWindow .label
+      {
+        display: inline-block;
+        width: 75px;
+        font-weight: bold;
+      }
+
+      .simpleInfoWindow a
+      {
+        font-size: 10px;
+        text-decoration: none;
+        color: #555;
+      }
+      .simpleInfoWindow:hover a
+      {
+        text-decoration: underline;
+      }
+      /**/
+
+    </style>
+
+    <script src="http://js.arcgis.com/3.6/"></script>
+    <script>
+
+      var map;
+
+      require([
+        "esri/map", 
+        "esri/dijit/InfoWindowLite",
+        "esri/InfoTemplate",
+        "esri/layers/FeatureLayer",
+        "dojo/dom-construct",
+        "dojo/domReady!"
+      ], function(
+          Map,
+          InfoWindowLite,
+          InfoTemplate,
+          FeatureLayer,
+          domConstruct
+         ) {
+
+        map = new Map("mapDiv", 
+        {
+          basemap: "topo",
+          center: [0.626, 42.494],
+          zoom: 8
+        });
+
+        var infoWindow = new InfoWindowLite(null, domConstruct.create("div", null, null, map.root));
+        infoWindow.startup();
+        map.setInfoWindow(infoWindow);
+
+        var template = new InfoTemplate();
+        template.setTitle("<b>${name}</b>");
+        template.setContent("\
+          <div class='imgholder'>\
+            <img class='thumbnail' src='http://www.nevasport.com/classic/resorts/${logo}'/>\
+          </div>\
+          <a href='http://www.nevasport.com/classic/ski/estacion/${id}' target='_blank'>Más información</a>");
+
+        //add a layer to the map
+        var featureLayer = new FeatureLayer("http://services.arcgis.com/84aT6SlX1Oaf3c5i/arcgis/rest/services/Estaciones_de_Esqu%C3%AD_en_Espa%C3%B1a/FeatureServer/0", {
+          mode: FeatureLayer.MODE_ONDEMAND,
+          infoTemplate:template,
+          outFields: ["id" , "name", "logo"]
+        });
+        map.addLayer(featureLayer);
+
+        map.infoWindow.resize(155, 170);
+
+        map.on('mouse-down',function()
+        {
+          map.infoWindow.hide();
+        });
+
+      });
+    </script>
+  </head>
+  
+  <body>
+    <div id="mapDiv"></div>
+  </body>
+
+</html>
