@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=7, IE=9, IE=10">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no"/>
+    <title>demo 1</title>
+    <link rel="stylesheet" href="http://js.arcgis.com/3.6/js/dojo/dijit/themes/tundra/tundra.css">
+    <link rel="stylesheet" href="http://js.arcgis.com/3.6/js/esri/css/esri.css">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+    </style>
+    <script src="js/dojoConfig.js"></script>
+    <script src="http://js.arcgis.com/3.6/"></script>
+</head>
+<body class="tundra">
+
+	<div id="search"></div>
+	<div id="map"></div>
+	<div id="info">
+        <form action="." id="searchForm" method="POST">
+            <p><label for="from">Desde: <input type="text" id="from" name="from"></label></p>
+            <p><label for="to">Hasta: <input type="text" id="to" name="to"></label></p>
+            <p><input type="submit" value="Buscar"></p>
+        </form>
+
+    </div>
+
+	<script src="js/app.js"></script>
+</body>
+</html>
